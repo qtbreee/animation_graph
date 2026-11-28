@@ -23,17 +23,36 @@ namespace animationgraph {
 			InitializeEdges();
 			InitializeGraphModel();
 
+			//initialize the animation order and visited vertices for Dijkstra's algorithm
 			animationOrder =
 				gcnew System::Collections::Generic::List<int>();
 
 			animatedVisited =
 				gcnew System::Collections::Generic::List<int>();
 
+			//which vertex is currently being animated
 			animationDistances = nullptr;
+			//index of the current vertex being animated
 			animationIndex = 0;
-			currentAnimatedVertex = -1;
-			
+			currentAnimatedVertex = -1;	
+
+			primParent = nullptr; //which parent connects each vertex to the MST
+			primKey = nullptr; //the selected weight
+
+			//edge currently highlighted during animation of Prim's
+			mstEdgeSources =
+				gcnew System::Collections::Generic::List<int>();
+
+			mstEdgeDestinations =
+				gcnew System::Collections::Generic::List<int>();
+
+			//tells the timer whether its animation dijkstra or prims
+			currentAnimationAlgorithm = "";
+			//final MST weight
+			primTotalWeight = 0;
 		}
+
+
 
 	protected:
 		/// <summary>
@@ -41,12 +60,14 @@ namespace animationgraph {
 		/// </summary>
 		~GraphForm()
 		{
+			//delete the graph model if it exists
 			if (graphModel != nullptr)
 			{
 				delete graphModel;
 				graphModel = nullptr;
 			}
 
+			//delete the animation order and visited vertices for Dijkstra's algorithm
 			if (components)
 			{
 				delete components;
@@ -71,6 +92,17 @@ namespace animationgraph {
 
 		int animationIndex;
 		int currentAnimatedVertex;
+
+		//animation order and visited vertices for Prim's algorithm
+
+	private: array<int>^ primParent;
+		   array<int>^ primKey;
+
+		   System::Collections::Generic::List<int>^ mstEdgeSources;
+		   System::Collections::Generic::List<int>^ mstEdgeDestinations;
+
+		   System::String^ currentAnimationAlgorithm;
+		   int primTotalWeight;
 
 	private:
 		void InitializeVertexPositions()
@@ -147,6 +179,24 @@ namespace animationgraph {
 			delete weightBrush;
 		}
 
+		private:
+			void DrawMSTEdge(
+				System::Drawing::Graphics^ graphics,
+				int source, int destination) {
+				System::Drawing::Point start = vertexPositions[source];
+
+				System::Drawing::Point end = vertexPositions[destination];
+
+				//blue and thicker than a normal graph edge
+				System::Drawing::Pen^ mstPen =
+					gcnew System::Drawing::Pen(
+						System::Drawing::Color::Blue,
+						5.0f);
+				graphics->DrawLine(mstPen, start, end);
+
+				delete mstPen;
+			}
+
 	private:
 		void DrawVertex(
 			System::Drawing::Graphics^ graphics,
@@ -188,7 +238,7 @@ namespace animationgraph {
 	private:void InitializeGraphModel()
 		{
 		//max of 100 vertices, undirected (false)
-			graphModel = new Graph(100, false); // 10 vertices, undirected
+			graphModel = new Graph(10, false); // 10 vertices, undirected
 
 			//create the five displayed sample vertices
 			for (int vertex = 0;
@@ -405,9 +455,9 @@ private: System::Windows::Forms::NumericUpDown^ weightInput;
 			// 
 			// addVertexBtn
 			// 
-			this->addVertexBtn->Location = System::Drawing::Point(67, 262);
+			this->addVertexBtn->Location = System::Drawing::Point(55, 262);
 			this->addVertexBtn->Name = L"addVertexBtn";
-			this->addVertexBtn->Size = System::Drawing::Size(86, 28);
+			this->addVertexBtn->Size = System::Drawing::Size(115, 28);
 			this->addVertexBtn->TabIndex = 10;
 			this->addVertexBtn->Text = L"Add Vertex";
 			this->addVertexBtn->UseVisualStyleBackColor = true;
@@ -526,11 +576,22 @@ private: System::Windows::Forms::NumericUpDown^ weightInput;
 
 		}
 
+
 private:
 	void PrepareDijkstraAnimation(int* distances)
 	{
-		animationTimer->Stop();
+		// Set the current animation algorithm to "Dijkstra" and clear any previous animation data.
+		currentAnimationAlgorithm = "Dijkstra";
+		mstEdgeSources->Clear();
+		mstEdgeDestinations->Clear();
 
+
+		primParent = nullptr;
+		primKey = nullptr;
+		primTotalWeight = 0;
+
+		// Stop the animation timer and clear previous animation data.
+		animationTimer->Stop();
 		animationOrder->Clear();
 		animatedVisited->Clear();
 		stepListbx->Items->Clear();
@@ -588,6 +649,57 @@ private:
 		graphPanel->Invalidate();
 	}
 
+	// Prepare the animation for Prim's algorithm.
+	private:
+		void PreparePrimAnimation(int* parent, int* key, std::vector<int>& visitOrder) {
+			//stop any animation that is already running
+			animationTimer->Stop();
+
+			//clear information from the previous animation
+			animationOrder->Clear();
+			animatedVisited->Clear();
+			mstEdgeSources->Clear();
+			mstEdgeDestinations->Clear();
+			stepListbx->Items->Clear();
+
+			int vertexCount = vertexPositions->Count;
+
+			//create managed arrays that the windows form can use
+			primParent = gcnew array<int>(vertexCount);
+			primKey = gcnew array<int>(vertexCount);
+
+			primTotalWeight = 0;
+
+			// Copy the results from the C++ Prim algorithm
+			// into arrays owned by the windows form
+			for (int vertex = 0; vertex < vertexCount; vertex++) {
+				primParent[vertex] = parent[vertex];
+				primKey[vertex] = key[vertex];
+
+				// The starting vertex has parent -1,
+				// so it is not included in the total weight
+				if (parent[vertex] != -1 && key[vertex] != INT_MAX) {
+					primTotalWeight += key[vertex];
+				}
+			}
+
+			//copy the order in which prim visited the vertices.
+			for (int index = 0; index < static_cast<int>(visitOrder.size()); index++) {
+				animationOrder->Add(visitOrder[index]);
+			}
+
+			//begin the animation at its first step
+				animationIndex = 0;
+				currentAnimatedVertex = -1;
+
+				//tell the shared timer that it is animating prim
+				currentAnimationAlgorithm = "Prim";
+
+				//redraw the graph in its starting state
+				graphPanel->Invalidate();
+		}
+
+
 private:
 	void ShowNextAnimationStep()
 	{
@@ -598,46 +710,105 @@ private:
 			animatedVisited->Add(currentAnimatedVertex);
 		}
 
-		// Check whether the animation has finished.
+		// stop when every animation step has been displayed
 		if (animationIndex >= animationOrder->Count)
 		{
 			animationTimer->Stop();
 			currentAnimatedVertex = -1;
+			pauseBtn->Text = "Pause";
 
-			statusLabel->Text =
-				"Dijkstra animation completed.";
-
+			// Display the correct completion message
+			if (currentAnimationAlgorithm == "Prim")
+			{
+				statusLabel->Text =
+					"Prim's algorithm animation completed. Total MST weight: " +
+					primTotalWeight.ToString();
+			}
+			else 
+			{
+				statusLabel->Text =
+					"Dijkstra animation completed.";
+			}
 			graphPanel->Invalidate();
 			return;
 		}
 
+		//select the next vertex in the recorded order
 		currentAnimatedVertex =
 			animationOrder[animationIndex];
 
-		int distance =
-			animationDistances[currentAnimatedVertex];
+		if (currentAnimationAlgorithm == "Prim")
+		{
+			int parent = primParent[currentAnimatedVertex];
 
-		stepListbx->Items->Add(
-			"Iteration " +
-			(animationIndex + 1).ToString() +
-			": Vertex " +
-			currentAnimatedVertex.ToString() +
-			", Distance " +
-			distance.ToString());
+			//the source is the first vertec and has no parent
+			if (parent == -1)
+			{
+				stepListbx->Items->Add(
+					"Iteration " +
+					(animationIndex + 1).ToString() +
+					": start at vertex " +
+					currentAnimatedVertex.ToString());
 
-		statusLabel->Text =
-			"Current vertex: " +
-			currentAnimatedVertex.ToString() +
-			" | Distance: " +
-			distance.ToString();
+				statusLabel->Text = "starting Prim at vertex " +
+					currentAnimatedVertex.ToString();		
+			}
+			else 
+			{
+				//retreive the weight of the selected MST eedge
+				int weight = primKey[currentAnimatedVertex];
 
+				//save the edge so graphPanel_Paint can highlight it
+				mstEdgeSources->Add(parent);
+				mstEdgeDestinations->Add(currentAnimatedVertex);
+
+				stepListbx->Items->Add(
+					"Iteration " +
+					(animationIndex + 1).ToString() +
+					": add edge " +
+					parent.ToString() +
+					"-" +
+					currentAnimatedVertex.ToString() +
+					", Weight " +
+					weight.ToString());
+
+				statusLabel->Text =
+					"Adding MST edge " +
+					parent.ToString() +
+					"-" +
+					currentAnimatedVertex.ToString();
+			}
+		}
+		else 
+		{
+			//dijkstra displayed the finalized shortest distance
+			int distance = animationDistances[currentAnimatedVertex];
+
+			stepListbx->Items->Add(
+				"Iteration " +
+				(animationIndex + 1).ToString() +
+				": Vertex " +
+				currentAnimatedVertex.ToString() +
+				", Distance " +
+				distance.ToString());
+
+			statusLabel->Text = 
+				"current vertex: " +
+				currentAnimatedVertex.ToString() +
+				" | Distance: " + 
+				distance.ToString();
+		}
+
+		//move to the next step in the animation order
 		animationIndex++;
 
+		//cause graphPanel_Paint to run again and redraw the graph with the new current vertex
 		graphPanel->Invalidate();
 	}
 
 #pragma endregion
 	private: System::Void GraphForm_Load(System::Object^ sender, System::EventArgs^ e) {
+		this->Size = System::Drawing::Size(1200, 750);
 		algorithmCombobx->SelectedIndex = 0; //dijkstra
 		fringeCombobx->SelectedIndex = 0; //binary heap
 	}
@@ -662,6 +833,17 @@ private: System::Void graphPanel_Paint(System::Object^ sender, System::Windows::
 			edgeSources[edge],
 			edgeDestinations[edge],
 			edgeWeights[edge]);
+	}
+
+	//draw the MST edges selected so far
+	for (int edge = 0;
+		edge < mstEdgeSources->Count;
+		edge++)
+	{
+		DrawMSTEdge(
+			e->Graphics,
+			mstEdgeSources[edge],
+			mstEdgeDestinations[edge]);
 	}
 
 	// Draw vertices over the edges.
@@ -839,8 +1021,55 @@ private: System::Void runButton_Click(System::Object^ sender, System::EventArgs^
 	}
 	else
 	{
+		//allocate arrays for prims results
+		int* parent = new int[graphModel->adjSize];
+
+		int* key = new int[graphModel->adjSize];
+
+		//records the real order produced by prims
+		std::vector<int> visitOrder;
+
+		bool connected;
+
+		//run the selected fringe implementation
+		if (fringe == "Binary Heap")
+		{
+			connected =
+				graphModel->primsBinaryHeap(source, parent, key, visitOrder);
+		}
+		else
+		{
+			connected =
+				graphModel->primsLL(source, parent, key, visitOrder);
+		}
+
+		//copy the results before deleting the native arrays
+		PreparePrimAnimation(parent, key, visitOrder);
+
+		//delete the native arrays
+		delete[] parent;
+		delete[] key;
+
+		parent = nullptr;
+		key = nullptr;
+
+		pauseBtn->Text = "Pause";
+
 		statusLabel->Text =
-			"Prim will be connected next.";
+			"Prim animation started using " +
+			fringe + ".";
+
+		animationTimer->Start();
+
+		//prim requires a connected graph for one complete MST
+		if (!connected) 
+		{
+			MessageBox::Show(
+				"The graph is not fully connected "
+				"Prim can only display the connected portion "
+				"Disconnected Graph ");
+			
+		}
 	}
 
 }
@@ -886,9 +1115,17 @@ private: System::Void resetBtn_Click(System::Object^ sender, System::EventArgs^ 
     animationOrder->Clear();
     animatedVisited->Clear();
 
+	mstEdgeSources->Clear();
+	mstEdgeDestinations->Clear();
+
     animationDistances = nullptr;
+	primParent = nullptr;
+	primKey = nullptr;
+
     animationIndex = 0;
     currentAnimatedVertex = -1;
+	primTotalWeight = 0;
+	currentAnimationAlgorithm = "";
 
     stepListbx->Items->Clear();
 
