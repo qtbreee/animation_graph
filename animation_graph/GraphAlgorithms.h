@@ -551,6 +551,160 @@ public:
 		std::cout << std::endl;
 	}
 
+	bool primsBinaryHeap(int source, int* parent, int* key, std::vector<int>& visitOrder) {
+		// Check if the source vertex is valid
+		if (source < 0 || source >= adjSize || adjacencyList[source] == nullptr) {
+			std::cerr << "Invalid starting vertex.\n";
+			return false;
+		}
+		// Initialize arrays for visited vertices, key values, and parent vertices
+		bool* visited = new bool[adjSize];
+		// Initialize all vertices as unvisited, with infinite key values and no parent
+		for (int vertex = 0; vertex < adjSize; vertex++) {
+			visited[vertex] = false;
+			key[vertex] = INT_MAX;
+			parent[vertex] = -1;
+		}
+		// Create a binary heap to store vertices based on their key values
+		BinaryHeap fringe;
+
+		key[source] = 0;
+		fringe.insert(source, 0);
+
+		// Continue until all vertices are processed
+		while (!fringe.isEmpty()) {
+			FringeEntry minimum = fringe.removeMinimum();
+			int currentVertex = minimum.vertex;
+			int removedWeight = minimum.priority;
+
+			//ignore old heap entries
+			if (removedWeight != key[currentVertex]) {
+				continue;
+			}
+			// If the current vertex has already been visited, skip it
+			if (visited[currentVertex]) {
+				continue;
+			}
+
+			//mark the current vertex as visited and add it to the visit order
+			visited[currentVertex] = true;
+			// Add the current vertex to the visit order
+			visitOrder.push_back(currentVertex);
+
+			//explore the neighbors of the current vertex
+			Node* currentEdge = adjacencyList[currentVertex]->head;
+
+			// Traverse the adjacency list of the current vertex
+			while (currentEdge != nullptr) {
+				int neighbor = currentEdge->value;
+				int weight = currentEdge->weight;
+
+				// If the neighbor has not been visited and the edge weight
+				// is less than the current key value, update the key and parent
+				if (!visited[neighbor] && weight < key[neighbor]) {
+					key[neighbor] = weight;
+					parent[neighbor] = currentVertex;
+
+					fringe.insert(neighbor, weight);
+				}
+
+				// Move to the next edge in the adjacency list
+				currentEdge = currentEdge->next;
+			}
+		}
+
+		// Check if all vertices were visited (ex. the graph is connected)
+		bool connected = visitOrder.size() == static_cast<size_t>(totalVertexes);
+
+		delete[] visited;
+		return connected;
+	}
+
+	bool primsLL(int source, int* parent, int* key, std::vector<int>& visitOrder) {
+		// Check if the source vertex is valid
+		if (source < 0 || source >= adjSize || adjacencyList[source] == nullptr) {
+			std::cerr << "Invalid starting vertex.\n";
+			return false;
+		}
+		// Initialize arrays for visited vertices, key values, and parent vertices
+		bool* visited = new bool[adjSize];
+
+		for (int vertex = 0; vertex < adjSize; vertex++) {
+			visited[vertex] = false;
+			key[vertex] = INT_MAX;
+			parent[vertex] = -1;
+		}
+
+		LinkedList fringe;
+
+		key[source] = 0;
+		fringe.addNode(source, 0);
+
+		// Continue until all vertices are processed
+		while (fringe.head != nullptr)
+		{
+			int currentVertex = -1;
+			int minimumWeight = INT_MAX;
+
+			Node* currentFringe = fringe.head;
+
+			// Search the linked list for the minimum.
+			while (currentFringe != nullptr)
+			{
+				int vertex = currentFringe->value;
+
+				if (!visited[vertex] &&
+					key[vertex] < minimumWeight)
+				{
+					minimumWeight = key[vertex];
+					currentVertex = vertex;
+				}
+
+				currentFringe = currentFringe->next;
+			}
+
+			if (currentVertex == -1)
+			{
+				break;
+			}
+
+			visited[currentVertex] = true;
+			visitOrder.push_back(currentVertex);
+
+			fringe.removeNode(currentVertex);
+
+			Node* currentEdge =
+				adjacencyList[currentVertex]->head;
+
+			while (currentEdge != nullptr)
+			{
+				int neighbor = currentEdge->value;
+				int edgeWeight = currentEdge->weight;
+
+				if (!visited[neighbor] &&
+					edgeWeight < key[neighbor])
+				{
+					key[neighbor] = edgeWeight;
+					parent[neighbor] = currentVertex;
+
+					fringe.addNode(
+						neighbor,
+						edgeWeight);
+				}
+
+				currentEdge = currentEdge->next;
+			}
+		}
+
+		bool connected =
+			visitOrder.size() ==
+			static_cast<size_t>(totalVertexes);
+
+		delete[] visited;
+
+		return connected;
+	}
+
 	// Prim's Algorithm: Minimum Spanning Tree
 	void prims(int source) {
 		if (source < 0 || source >= adjSize ||
